@@ -4,6 +4,7 @@
   #become: yes
   vars_files:
     - vars.yml
+    - vars_secret.yml
 
   vars:
     # ===== 在这里指定你的 JDK 路径 =====
@@ -88,6 +89,6 @@
       debug:
         msg: |
           {{ '✅ 应用启动成功！' if health_check.status == 200 else '⚠️  应用可能启动较慢，请稍后查看日志' }}
-          访问地址: http://localhost:8188
-          日志文件: {{ deploy_dir }}/app.log
-          停止命令: {{ deploy_dir }}/stop.sh
+          ✅ 访问地址: http://localhost:8188
+          ✅ 日志文件: {{ deploy_dir }}/app.log
+          ✅ 停止命令: {{ deploy_dir }}/stop.sh
