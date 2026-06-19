@@ -1,5 +1,6 @@
 # ========== Nexus 配置 ==========
-nexus_url: "http://localhost:8081"
+#nexus_url: "http://localhost:8081" #本地mac
+nexus_url: "http://host.docker.internal:8081" #docker
 nexus_repository: "maven-releases"
 nexus_username: "admin"
 nexus_password: "admin"
