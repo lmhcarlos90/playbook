@@ -1,0 +1,10 @@
+#!/bin/bash
+# Spring Boot 启动脚本
+
+cd {{ deploy_dir }}
+
+{{ java_path }} \
+  -Xms{{ jvm_xms }} \
+  -Xmx{{ jvm_xmx }} \
+  -Dspring.profiles.active={{ spring_profile }} \
+  -jar {{ deploy_dir }}/{{ jar_file }}

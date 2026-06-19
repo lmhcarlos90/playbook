@@ -1,0 +1,23 @@
+# ========== Nexus 配置 ==========
+nexus_url: "http://localhost:8081"
+nexus_repository: "maven-releases"
+nexus_username: "admin"
+nexus_password: "admin"
+
+# ========== 应用配置 ==========
+app_name: "kyc-api"
+app_group_id: "com.kyc"
+app_artifact_id: "kyc-api"
+app_version: "1.0.0"
+app_packaging: "jar"
+
+# 部署目录
+deploy_dir: "{{ ansible_facts['env']['HOME'] }}/apps/kyc-api"
+jar_file: "{{ app_artifact_id }}-{{ app_version }}.{{ app_packaging }}"
+
+# JVM 参数
+jvm_xms: "512m"
+jvm_xmx: "1024m"
+
+# Spring Profile
+spring_profile: "prod"

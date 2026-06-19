@@ -1,0 +1,18 @@
+[Unit]
+Description={{ app_name }} Spring Boot Application
+After=network.target
+
+[Service]
+User=root
+WorkingDirectory={{ deploy_dir }}
+ExecStart=/usr/bin/java \
+  -Xms{{ jvm_xms }} \
+  -Xmx{{ jvm_xmx }} \
+  -Dspring.profiles.active={{ spring_profile }} \
+  -jar {{ deploy_dir }}/{{ jar_file }}
+SuccessExitStatus=143
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

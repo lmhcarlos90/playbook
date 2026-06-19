@@ -1,0 +1,4 @@
+# 敏感文件
+vars_secret.yml
+*.vault
+.vault_pass

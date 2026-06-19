@@ -1,0 +1,93 @@
+---
+- name: 从 Nexus 下载并部署 Spring Boot 应用
+  hosts: app_servers
+  #become: yes
+  vars_files:
+    - vars.yml
+
+  vars:
+    # ===== 在这里指定你的 JDK 路径 =====
+    java_path: "/Users/apple/Library/Java/JavaVirtualMachines/azul-17.0.19/Contents/Home/bin/java"
+    # 部署目录（Mac 上建议放用户目录下）
+    deploy_dir: "{{ ansible_facts['env']['HOME'] }}/apps/{{ app_name }}"
+
+  tasks:
+    # ========== 1. 环境准备 ==========
+    - name: 确保 JDK 已安装
+      yum:
+        name: java-21-openjdk
+        state: present
+      when: ansible_os_family == "RedHat"
+
+    - name: 创建应用目录
+      file:
+        path: "{{ deploy_dir }}"
+        state: directory
+        mode: '0755'
+
+    # ========== 2. 从 Nexus 下载 JAR 包 ==========
+    - name: 构建 Nexus 下载 URL
+      set_fact:
+        nexus_download_url: >-
+          {{ nexus_url }}/repository/{{ nexus_repository }}/{{ app_group_id | replace('.', '/') }}/{{ app_artifact_id }}/{{ app_version }}/{{ app_artifact_id }}-{{ app_version }}.{{ app_packaging }}
+
+    - name: 从 Nexus 下载 JAR 包
+      get_url:
+        url: "{{ nexus_download_url }}"
+        dest: "{{ deploy_dir }}/{{ jar_file }}"
+        url_username: "{{ nexus_username }}"
+        url_password: "{{ nexus_password }}"
+        force_basic_auth: yes
+        mode: '0755'
+      register: download_result
+
+    - name: 显示下载结果
+      debug:
+        msg: "下载状态: {{ download_result.status_code }}, 包大小: {{ download_result.size | default('未知') }}"
+
+    # ========== 3. 生成启动/停止脚本 ==========
+    - name: 生成启动脚本
+      template:
+        src: templates/start.sh.j2
+        dest: "{{ deploy_dir }}/start.sh"
+        mode: '0755'
+
+    - name: 生成停止脚本
+      template:
+        src: templates/stop.sh.j2
+        dest: "{{ deploy_dir }}/stop.sh"
+        mode: '0755'
+
+    # ========== 4. 启动应用 ==========
+    - name: 检查应用是否已在运行
+      shell: "pgrep -f {{ jar_file }} || true"
+      register: app_pid
+      changed_when: false
+
+    - name: 停止旧版本（如果在运行）
+      shell: "{{ deploy_dir }}/stop.sh"
+      when: app_pid.stdout != ""
+
+    - name: 启动应用（后台运行）
+      shell: "nohup {{ deploy_dir }}/start.sh > {{ deploy_dir }}/app.log 2>&1 &"
+      async: 10
+      poll: 0
+
+    # ========== 5. 健康检查 ==========
+    - name: 等待应用启动完成
+      uri:
+        url: "http://localhost:8188/api/healthCheck"
+        status_code: 200
+      register: health_check
+      until: health_check.status == 200
+      retries: 12
+      delay: 5
+      ignore_errors: yes
+
+    - name: 显示部署结果
+      debug:
+        msg: |
+          {{ '✅ 应用启动成功！' if health_check.status == 200 else '⚠️  应用可能启动较慢，请稍后查看日志' }}
+          访问地址: http://localhost:8188
+          日志文件: {{ deploy_dir }}/app.log
+          停止命令: {{ deploy_dir }}/stop.sh
