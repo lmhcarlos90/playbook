@@ -77,7 +77,8 @@
     # ========== 5. 健康检查 ==========
     - name: 等待应用启动完成
       uri:
-        url: "http://localhost:8188/api/healthCheck"
+        #url: "http://localhost:8188/api/healthCheck" local
+        url: "http://host.docker.internal:8188/api/healthCheck" #docker
         status_code: 200
       register: health_check
       until: health_check.status == 200
@@ -89,6 +90,7 @@
       debug:
         msg: |
           {{ '✅ 应用启动成功！' if health_check.status == 200 else '⚠️  应用可能启动较慢，请稍后查看日志' }}
-          ✅ 访问地址: http://localhost:8188
+          ✅ 访问地址: http://localhost:8188 #locl mac
+          ✅ 访问地址: http://host.docker.internal:8188 #docker
           ✅ 日志文件: {{ deploy_dir }}/app.log
           ✅ 停止命令: {{ deploy_dir }}/stop.sh
