@@ -1,0 +1,8 @@
+---
+- name: test Playbook
+  hosts: all
+  gather_facts: no
+  tasks:
+    - name: print Hello
+      debug:
+        msg: "Hello from Semaphore + MySQL on MacBook M5!"
