@@ -11,8 +11,23 @@
     java_path: "/Users/apple/Library/Java/JavaVirtualMachines/azul-17.0.19/Contents/Home/bin/java"
     # 部署目录（Mac 上建议放用户目录下）
     deploy_dir: "{{ ansible_facts['env']['HOME'] }}/apps/{{ app_name }}"
+    backup_dir: "{{ deploy_dir }}/backup"
 
   tasks:
+    # 创建备份目录
+    - name: 创建备份文件夹
+      file:
+        path: "{{ backup_dir }}"
+        state: directory
+        mode: '0755'
+
+    # 备份当前正在运行的旧Jar（核心备份逻辑）
+    - name: 备份现有Jar包
+      copy:
+        src: "{{ deploy_dir }}/{{ jar_file }}"
+        dest: "{{ backup_dir }}/{{ jar_file }}_bak_{{ ansible_date_time.iso8601_short }}"
+        remote_src: true
+      ignore_errors: true  # 首次部署无旧包，忽略报错
     # ========== 1. 环境准备 ==========
     - name: 确保 JDK 已安装
       yum:
@@ -65,32 +80,30 @@
       register: app_pid
       changed_when: false
 
-    - name: 停止旧版本（如果在运行）
+    - name: 清理超过5个的旧备份
+      shell: "ls -t {{ backup_dir }}/{{ jar_file }}_bak_* | tail +6 | xargs rm -f"
+      ignore_errors: true
+
+  # 5. 健康检查失败则触发回滚（Ansible block/rescue 语法）
+  block:
+    - name: 停止旧进程
       shell: "{{ deploy_dir }}/stop.sh"
-      when: app_pid.stdout != ""
-
-    - name: 启动应用（后台运行）
+    - name: 后台启动新版本
       shell: "nohup {{ deploy_dir }}/start.sh > {{ deploy_dir }}/app.log 2>&1 &"
-      async: 10
-      poll: 0
-
-    # ========== 5. 健康检查 ==========
-    - name: 等待应用启动完成
+    - name: 健康检查新版本
       uri:
-        #url: "http://localhost:8188/api/healthCheck" local
-        url: "http://host.docker.internal:8188/api/healthCheck" #docker
+        url: "http://host.docker.internal:8188/api/healthCheck"
         status_code: 200
-      register: health_check
-      until: health_check.status == 200
-      retries: 12
-      delay: 5
-      ignore_errors: yes
-
-    - name: 显示部署结果
+      retries: 10
+      delay: 3
+  rescue:
+    # 【回滚核心】健康检查失败自动执行
+    - name: 新版本启动失败，执行回滚
+      shell: "{{ deploy_dir }}/stop.sh"
+    - name: 恢复备份旧Jar
+      shell: "cp $(ls -t {{ backup_dir }}/{{ jar_file }}_bak_* | head -1) {{ deploy_dir }}/{{ jar_file }}"
+    - name: 重启旧版本应用
+      shell: "nohup {{ deploy_dir }}/start.sh > {{ deploy_dir }}/app.log 2>&1 &"
+    - name: 回滚完成提示
       debug:
-        msg: |
-          {{ '✅ 应用启动成功！' if health_check.status == 200 else '⚠️  应用可能启动较慢，请稍后查看日志' }}
-          ✅ 访问地址: http://localhost:8188 #locl mac
-          ✅ 访问地址: http://host.docker.internal:8188 #docker
-          ✅ 日志文件: {{ deploy_dir }}/app.log
-          ✅ 停止命令: {{ deploy_dir }}/stop.sh
+        msg: "❌ 新版本启动失败，已自动回滚至上一个可用版本"

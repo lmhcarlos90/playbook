@@ -1,0 +1,51 @@
+---
+- name: 一键回滚 kyc-api 至上一稳定版本
+  hosts: app_servers
+  connection: local
+  vars_files: vars.yml
+  vars:
+    jar_file: "kyc-api-{{ app_version }}.jar"
+    backup_dir: "{{ deploy_dir }}/backup"
+
+  tasks:
+    # 1. 停止当前异常应用
+    - name: 停止运行中的应用
+      shell: "{{ deploy_dir }}/stop.sh"
+
+    # 2. 校验是否存在备份包
+    - name: 查询备份文件列表
+      shell: "ls -t {{ backup_dir }}/{{ jar_file }}_bak_* || echo none"
+      register: bak_list
+
+    - name: 无备份，终止回滚
+      fail:
+        msg: "未找到历史备份文件，无法回滚"
+      when: bak_list.stdout == "none"
+
+    - name: 从Nexus拉取指定历史版本Jar
+      get_url:
+        url: "{{ nexus_url }}/repository/maven-releases/com/kyc/kyc-api/{{ app_version }}/kyc-api-{{ app_version }}.jar"
+        dest: "{{ deploy_dir }}/{{ jar_file }}"
+        url_username: "{{ nexus_username }}"
+        url_password: "{{ nexus_password }}"
+        force_basic_auth: yes
+
+    # 3. 还原最新备份Jar
+    - name: 恢复最近备份版本
+      shell: "cp $(ls -t {{ backup_dir }}/{{ jar_file }}_bak_* | head -1) {{ deploy_dir }}/{{ jar_file }}"
+
+    # 4. 启动旧版本
+    - name: 启动回滚后的应用
+      shell: "nohup {{ deploy_dir }}/start.sh > {{ deploy_dir }}/app.log 2>&1 &"
+
+    # 5. 验证回滚结果
+    - name: 回滚健康检查
+      uri:
+        url: "http://host.docker.internal:8188/api/healthCheck"
+        status_code: 200
+      retries: 8
+      delay: 3
+
+    - name: 回滚成功
+      debug:
+        msg: "✅ 应用回滚完成，当前访问地址：http://host.docker.internal:8188"
